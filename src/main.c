@@ -42,16 +42,21 @@ int main(int agrc, char** argv) {
   const char* file_content = read_file(file_path);
 
   tuna_lexer* lexer = new_lexer(file_content, file_path);
+  tuna_parser* parser = new_parser(lexer);
   
-  printf("File '%s' content:\n", file_path);
-  printf("%s\n\n\n", file_content);
+  tuna_ast_node* root = parse_program(parser);
+  // printf("File '%s' content:\n", file_path);
+  // printf("%s\n\n\n", file_content);
 
-  while (!is_lexer_at_end(lexer)) {
-    token token = next_token(lexer);
-    printf("(%s:%i:%i) %s - %.*s\n", token.file_path, token.line, token.column, token_kind_as_string(token.kind), token.length, token.lexeme);
-  }
+  // while (!is_lexer_at_end(lexer)) {
+  //   token token = next_token(lexer);
+  //   printf("(%s:%i:%i) %s - %.*s\n", token.file_path, token.line, token.column, token_kind_as_string(token.kind), token.length, token.lexeme);
+  // }
+  print_ast(root, 0);
 
+  free_ast(root);
   free(file_content);
+  free_parser(parser);
   free_lexer(lexer);
   return 0;
 }

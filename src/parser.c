@@ -35,12 +35,39 @@ static bool matches(tuna_parser* parser, token_kind kind) {
 
 static void error(tuna_parser* parser, const char* message) {
   parser->had_error = true;
-  fprintf(stderr, "Error: %s\n", message);
+  fprintf(stderr, "(%s:%i:%i) Error: %s\n", parser->current.file_path, parser->current.line, parser->current.column, message);
+  fprintf(
+    stderr, 
+    "(%s:%i:%i) Current Token: %s - %.*s\n", 
+    parser->current.file_path, 
+    parser->current.line, 
+    parser->current.column, 
+    token_kind_as_string(parser->current.kind),
+    parser->current.length,
+    parser->current.lexeme
+  );
+  
+  fprintf(
+    stderr, 
+    "(%s:%i:%i) Previous Token: %s - %.*s\n", 
+    parser->previous.file_path, 
+    parser->previous.line, 
+    parser->previous.column, 
+    token_kind_as_string(parser->previous.kind),
+    parser->previous.length,
+    parser->previous.lexeme
+  );
+  
   exit(1);
 }
 
 static void expect(tuna_parser* parser, token_kind kind, const char* message) {
-  if (!matches(parser, kind)) error(parser, message);
+  if (parser->current.kind != kind) {
+    error(parser, message);
+  }
+
+  advance(parser);
+  // advance(parser); // ???
 }
 
 // Some forward declarations
@@ -49,6 +76,8 @@ static parse_rule* get_rule(token_kind kind);
 
 static tuna_ast_node* parse_integer(tuna_parser* parser) {
   int64_t value = strtol(parser->current.lexeme, NULL, 10);
+
+  printf("DEBUG: (%s:%i %s) MALLOC - %li\n", __FILE__, __LINE__, __func__, sizeof(tuna_ast_node));
   tuna_ast_node* node = malloc(sizeof(tuna_ast_node));
 
   node->kind = AST_INTEGER_LITERAL;
@@ -59,6 +88,8 @@ static tuna_ast_node* parse_integer(tuna_parser* parser) {
 
 static tuna_ast_node* parse_float(tuna_parser* parser) {
   double value = strtod(parser->current.lexeme, NULL);
+
+  printf("DEBUG: (%s:%i %s) MALLOC - %li\n", __FILE__, __LINE__, __func__, sizeof(tuna_ast_node));
   tuna_ast_node* node = malloc(sizeof(tuna_ast_node));
 
   node->kind = AST_FLOAT_LITERAL;
@@ -68,6 +99,7 @@ static tuna_ast_node* parse_float(tuna_parser* parser) {
 }
 
 static tuna_ast_node* parse_binary(tuna_parser* parser, tuna_ast_node* left) {
+  printf("DEBUG: (%s:%i %s) MALLOC - %li\n", __FILE__, __LINE__, __func__, sizeof(tuna_ast_node));
   tuna_ast_node* node = malloc(sizeof(tuna_ast_node));
 
   node->kind = AST_BINARY_EXPRESSION;
@@ -79,6 +111,7 @@ static tuna_ast_node* parse_binary(tuna_parser* parser, tuna_ast_node* left) {
 }
 
 static tuna_ast_node* parse_unary(tuna_parser* parser) {
+  printf("DEBUG: (%s:%i %s) MALLOC - %li\n", __FILE__, __LINE__, __func__, sizeof(tuna_ast_node));
   tuna_ast_node* node = malloc(sizeof(tuna_ast_node));
 
   node->kind = AST_UNARY_EXPRESSION;
@@ -89,6 +122,7 @@ static tuna_ast_node* parse_unary(tuna_parser* parser) {
 }
 
 static tuna_ast_node* parse_boolean(tuna_parser* parser) {
+  printf("DEBUG: (%s:%i %s) MALLOC - %li\n", __FILE__, __LINE__, __func__, sizeof(tuna_ast_node));
   tuna_ast_node* node = malloc(sizeof(tuna_ast_node));
 
   node->kind = AST_BOOLEAN_LITERAL;
@@ -109,7 +143,8 @@ static parse_rule parse_rules[] = {
   [TOKEN_FLOAT]         = {parse_float, NULL, PREC_NONE},
   [TOKEN_TRUE]          = {parse_boolean, NULL, PREC_NONE},
   [TOKEN_FALSE]         = {parse_boolean, NULL, PREC_NONE},
-  [TOKEN_OPEN_PAREN]    = {parse_grouping, NULL, PREC_NONE},
+  [TOKEN_OPEN_PAREN]    = {parse_grouping, NULL, PREC_CALL},
+  [TOKEN_CLOSE_PAREN]   = {NULL, NULL, PREC_NONE},
   [TOKEN_PLUS]          = {NULL, parse_binary, PREC_TERM},
   [TOKEN_MINUS]         = {parse_unary, parse_binary, PREC_TERM},
   [TOKEN_STAR]          = {NULL, parse_binary, PREC_FACTOR},
@@ -132,6 +167,7 @@ static parse_rule* get_rule(token_kind kind) {
   return &parse_rules[kind];
 }
 
+// TODO: rewirite this based on my implementation in RiverPrototype
 static tuna_ast_node* parse_expression(tuna_parser* parser, precedence precedence) {
   // printf("previous token: %i\n", parser->previous.kind);
   // printf("current token: %i\n", parser->current.kind);
@@ -145,6 +181,10 @@ static tuna_ast_node* parse_expression(tuna_parser* parser, precedence precedenc
   if (prefix_rule == NULL) {
     error(parser, "No prefix parselet.");
   }
+
+  // printf("Precedence <= Rule Precedence: %i\n", precedence <= get_rule(parser->current.kind)->precedence);
+  // printf("Current Precedence: %i\n", precedence);
+  // printf("Rule Precedence: %i\n", get_rule(parser->current.kind)->precedence);
 
   tuna_ast_node* left = prefix_rule(parser);
   while (precedence <= get_rule(parser->current.kind)->precedence) {

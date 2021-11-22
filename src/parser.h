@@ -7,6 +7,7 @@
 
 typedef enum {
   PREC_NONE,
+  PREC_LOWEST,
   PREC_ASSIGNMENT,  // =
   PREC_OR,          // or
   PREC_AND,         // and
