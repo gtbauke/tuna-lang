@@ -57,9 +57,12 @@ typedef struct {
   const char* lexeme;
   size_t length;
 
-  // TODO: add token location info here
+  int line;
+  int column;
+  const char* file_path;
 } token;
 
-token new_token(token_kind kind, const char* lexeme, size_t length);
+token new_token(token_kind kind, const char* lexeme, size_t length, int line, int column, const char* file_path);
+const char* token_kind_as_string(token_kind kind);
 
 #endif

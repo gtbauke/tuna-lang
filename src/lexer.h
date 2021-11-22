@@ -10,9 +10,13 @@ typedef struct {
 
   unsigned int start;
   unsigned int current;
+
+  int line;
+  int column;
+  const char* file_path;
 } tuna_lexer;
 
-tuna_lexer* new_lexer(const char* source);
+tuna_lexer* new_lexer(const char* source, const char* file_path);
 void free_lexer(tuna_lexer* lexer);
 
 token next_token(tuna_lexer* lexer);

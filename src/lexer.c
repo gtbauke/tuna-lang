@@ -4,13 +4,17 @@
 
 #include "lexer.h"
 
-tuna_lexer* new_lexer(const char* source) {
+tuna_lexer* new_lexer(const char* source, const char* file_path) {
   tuna_lexer* lexer = malloc(sizeof(tuna_lexer));
   lexer->source = source;
   lexer->source_length = strlen(source);
 
   lexer->start = 0;
   lexer->current = 0;
+
+  lexer->line = 1;
+  lexer->column = 1;
+  lexer->file_path = file_path;
 
   return lexer;
 }
@@ -37,6 +41,8 @@ static bool is_alpha_numeric(char c) {
 
 static char advance(tuna_lexer* lexer) {
   lexer->current++;
+  lexer->column++;
+
   return lexer->source[lexer->current - 1];
 }
 
@@ -57,6 +63,10 @@ static bool matches(tuna_lexer* lexer, char expected) {
   return true;
 }
 
+static token new_symbol_token(tuna_lexer* lexer, token_kind kind) {
+  return new_token(kind, &lexer->source[lexer->start], lexer->current - lexer->start, lexer->line, lexer->column, lexer->file_path);
+}
+
 static token handle_numbers(tuna_lexer* lexer) {
   token_kind kind = TOKEN_INTEGER;
   while (is_digit(peek(lexer))) advance(lexer);
@@ -68,7 +78,7 @@ static token handle_numbers(tuna_lexer* lexer) {
     kind = TOKEN_FLOAT;
   }
 
-  return new_token(kind, &lexer->source[lexer->start], lexer->current - lexer->start);
+  return new_token(kind, &lexer->source[lexer->start], lexer->current - lexer->start, lexer->line, lexer->column, lexer->file_path);
 }
 
 typedef struct {
@@ -107,11 +117,16 @@ static token handle_identifiers(tuna_lexer* lexer) {
     }
   }
 
-  return new_token(kind, &lexer->source[lexer->start], lexer->current - lexer->start);
+  return new_token(kind, &lexer->source[lexer->start], lexer->current - lexer->start, lexer->line, lexer->column, lexer->file_path);
 }
 
 static void skip_whitespace(tuna_lexer* lexer) {
   while (peek(lexer) == ' ' || peek(lexer) == '\t' || peek(lexer) == '\n' || peek(lexer) == '\r') {
+    if (peek(lexer) == '\n') {
+      lexer->line++;
+      lexer->column = 1;
+    }
+
     advance(lexer);
   }
 }
@@ -120,7 +135,14 @@ static void skip_comments(tuna_lexer* lexer) {
   if (peek(lexer) == '/' && peek_next(lexer) == '/') {
     while (peek(lexer) != '\n') advance(lexer);
   } else if (peek(lexer) == '/' && peek_next(lexer) == '*') {
-    while (!is_lexer_at_end(lexer) && peek(lexer) != '*' && peek_next(lexer) != '/') advance(lexer);
+    while (!is_lexer_at_end(lexer) && peek(lexer) != '*' && peek_next(lexer) != '/') {
+      if (peek(lexer) == '\n') {
+        lexer->line++;
+        lexer->column = 1;
+      }
+
+      advance(lexer);
+    }
 
     if (!is_lexer_at_end(lexer)) {
       fprintf(stderr, "Unterminated comment\n");
@@ -133,7 +155,14 @@ static void skip_comments(tuna_lexer* lexer) {
 }
 
 static token handle_strings(tuna_lexer* lexer) {
-  while (!is_lexer_at_end(lexer) && peek(lexer) != '\'') advance(lexer);
+  while (!is_lexer_at_end(lexer) && peek(lexer) != '\'') {
+    if (peek(lexer) == '\n') {
+      lexer->line++;
+      lexer->column = 1;
+    }
+
+    advance(lexer);
+  }
 
   if (is_lexer_at_end(lexer)) {
     fprintf(stderr, "Unterminated string\n");
@@ -141,7 +170,13 @@ static token handle_strings(tuna_lexer* lexer) {
   }
 
   advance(lexer);
-  return new_token(TOKEN_STRING, &lexer->source[lexer->start], (lexer->current - 1) - (lexer->start + 1));
+  return new_token(
+    TOKEN_STRING, 
+    &lexer->source[lexer->start], 
+    (lexer->current - 1) - (lexer->start + 1), 
+    lexer->line, lexer->column, 
+    lexer->file_path
+  );
 }
 
 token next_token(tuna_lexer* lexer) {
@@ -154,35 +189,35 @@ token next_token(tuna_lexer* lexer) {
   if (is_digit(c)) return handle_numbers(lexer);
 
   switch (c) {
-    case '(': return new_token(TOKEN_OPEN_PAREN, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case ')': return new_token(TOKEN_CLOSE_PAREN, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '[': return new_token(TOKEN_OPEN_BRACKET, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case ']': return new_token(TOKEN_CLOSE_BRACKET, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '{': return new_token(TOKEN_OPEN_CURLY, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '}': return new_token(TOKEN_CLOSE_CURLY, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case ',': return new_token(TOKEN_COMMA, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '.': return new_token(TOKEN_DOT, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case ':': return new_token(TOKEN_COLON, &lexer->source[lexer->start], lexer->current - lexer->start);
+    case '(': return new_symbol_token(lexer, TOKEN_OPEN_PAREN);
+    case ')': return new_symbol_token(lexer, TOKEN_CLOSE_PAREN);
+    case '[': return new_symbol_token(lexer, TOKEN_OPEN_BRACKET);
+    case ']': return new_symbol_token(lexer, TOKEN_CLOSE_BRACKET);
+    case '{': return new_symbol_token(lexer, TOKEN_OPEN_CURLY);
+    case '}': return new_symbol_token(lexer, TOKEN_CLOSE_CURLY);
+    case ',': return new_symbol_token(lexer, TOKEN_COMMA);
+    case '.': return new_symbol_token(lexer, TOKEN_DOT);
+    case ':': return new_symbol_token(lexer, TOKEN_COLON);
     case '=': return matches(lexer, '=')
-      ? new_token(TOKEN_EQUAL_EQUAL, &lexer->source[lexer->start], lexer->current - lexer->start)
-      : new_token(TOKEN_EQUAL, &lexer->source[lexer->start], lexer->current - lexer->start);
+      ? new_symbol_token(lexer, TOKEN_EQUAL_EQUAL)
+      : new_symbol_token(lexer, TOKEN_EQUAL);
     case '!': return matches(lexer, '=')
-      ? new_token(TOKEN_BANG_EQUAL, &lexer->source[lexer->start], lexer->current - lexer->start)
-      : new_token(TOKEN_BANG, &lexer->source[lexer->start], lexer->current - lexer->start);
+      ? new_symbol_token(lexer, TOKEN_BANG_EQUAL)
+      : new_symbol_token(lexer, TOKEN_BANG);
     case '<': return matches(lexer, '=')
-      ? new_token(TOKEN_LESS_EQUAL, &lexer->source[lexer->start], lexer->current - lexer->start)
-      : new_token(TOKEN_LESS, &lexer->source[lexer->start], lexer->current - lexer->start);
+      ? new_symbol_token(lexer, TOKEN_LESS_EQUAL)
+      : new_symbol_token(lexer, TOKEN_LESS);
     case '>': return matches(lexer, '=')
-      ? new_token(TOKEN_GREATER_EQUAL, &lexer->source[lexer->start], lexer->current - lexer->start)
-      : new_token(TOKEN_GREATER, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '+': return new_token(TOKEN_PLUS, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '-': return new_token(TOKEN_MINUS, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '*': return new_token(TOKEN_STAR, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '/': return new_token(TOKEN_SLASH, &lexer->source[lexer->start], lexer->current - lexer->start);
-    case '%': return new_token(TOKEN_PERCENT, &lexer->source[lexer->start], lexer->current - lexer->start);
+      ? new_symbol_token(lexer, TOKEN_GREATER_EQUAL)
+      : new_symbol_token(lexer, TOKEN_GREATER);
+    case '+': return new_symbol_token(lexer, TOKEN_PLUS);
+    case '-': return new_symbol_token(lexer, TOKEN_MINUS);
+    case '*': return new_symbol_token(lexer, TOKEN_STAR);
+    case '/': return new_symbol_token(lexer, TOKEN_SLASH);
+    case '%': return new_symbol_token(lexer, TOKEN_PERCENT);
     case '\'': return handle_strings(lexer);
     default:
-      if (c == '\0') return new_token(TOKEN_EOF, &lexer->source[lexer->start], lexer->current - lexer->start);
+      if (c == '\0') return new_symbol_token(lexer, TOKEN_EOF);
       return handle_identifiers(lexer);
   }
 }
