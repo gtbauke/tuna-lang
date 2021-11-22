@@ -125,4 +125,6 @@ typedef struct tuna_ast_node {
   } as;
 } tuna_ast_node;
 
+void free_ast(tuna_ast_node* root);
+
 #endif

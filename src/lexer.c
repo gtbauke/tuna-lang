@@ -182,6 +182,7 @@ token next_token(tuna_lexer* lexer) {
     case '%': return new_token(TOKEN_PERCENT, &lexer->source[lexer->start], lexer->current - lexer->start);
     case '\'': return handle_strings(lexer);
     default:
+      if (c == '\0') return new_token(TOKEN_EOF, &lexer->source[lexer->start], lexer->current - lexer->start);
       return handle_identifiers(lexer);
   }
 }
